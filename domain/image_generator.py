@@ -46,7 +46,7 @@ class ImageGeneratorManager:
             finished_timestamp = datetime.now()
             images_urls = []
             for image in images:
-                saved_image = await self._image_storage.save(f'{uuid4().hex}/{image.extension}', image.value)
+                saved_image = await self._image_storage.save(f'{uuid4().hex}.{image.extension}', image.value)
                 images_urls.append(saved_image.url)
             output = self._task_data_converter.to_data(task, is_input=False, images_urls=images_urls)
             task_status_log = FullTaskStatus(

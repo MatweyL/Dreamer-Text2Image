@@ -1,12 +1,11 @@
 import asyncio
-import json
 from typing import Optional, Callable, Awaitable
 
 from aio_pika import connect_robust
 from aio_pika.abc import AbstractChannel, AbstractConnection, AbstractIncomingMessage
 from loguru import logger
 
-from ports.common import ConverterI
+from ports.common import ConverterI, Startable
 
 
 class RabbitMQConsumer(Startable):

@@ -1,8 +1,11 @@
+from pydantic_settings import SettingsConfigDict
+
 from common.settings import SettingsElement
 
 
 class RabbitMQConsumerSettings(SettingsElement):
-    pass
+    queue_name: str
+    prefetch_count: int
+    reconnect_timeout: int
 
-
-rmq_consumer_settings = RabbitMQConsumerSettings()
+    model_config = SettingsConfigDict(env_prefix='rabbit_mq_consumer_')

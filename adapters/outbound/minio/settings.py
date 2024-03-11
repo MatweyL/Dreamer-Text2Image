@@ -8,10 +8,8 @@ class MinioSettings(SettingsElement):
     user: str
     password: str
     bucket: str
-    max_retries: int
+    retries: int
     retry_timeout: int
 
     model_config = SettingsConfigDict(env_prefix='minio_')
 
-
-minio_settings = MinioSettings()
