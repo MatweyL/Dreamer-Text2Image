@@ -1,4 +1,5 @@
 from datetime import datetime
+from io import BytesIO
 from typing import List
 from uuid import uuid4
 
@@ -70,4 +71,9 @@ class ImageGenerator:
                                 num_inference_steps=task.num_inference_steps,
                                 )
         images: List[Image] = result.images
-        return [image.tobytes() for image in images]
+        bytes_images = []
+        for image in images:
+            image_bytes_io = BytesIO()
+            image.save(image_bytes_io, format='PNG')
+            bytes_images.append(image_bytes_io.getvalue())
+        return bytes_images
