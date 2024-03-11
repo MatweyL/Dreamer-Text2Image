@@ -9,10 +9,9 @@ from loguru import logger
 
 from domain.schemas.core.enums import TaskStatus
 from domain.schemas.core.task import FullTask, TaskStatusLog, FullTaskStatus
-from domain.schemas.service import TextToImageTask
+from domain.schemas.service import TextToImageTask, GeneratedImage
 from domain.task_data_converter import TaskDataConverter
-from ports.inbound import TaskStatusSenderI
-from ports.outbound import ObjectStorageI
+from ports.outbound import TaskStatusSenderI, ObjectStorageI
 
 
 class ImageGeneratorManager:
@@ -47,8 +46,8 @@ class ImageGeneratorManager:
             finished_timestamp = datetime.now()
             images_urls = []
             for image in images:
-                image_url = await self._image_storage.save(uuid4().hex, image)
-                images_urls.append(image_url)
+                saved_image = await self._image_storage.save(f'{uuid4().hex}/{image.extension}', image.value)
+                images_urls.append(saved_image.url)
             output = self._task_data_converter.to_data(task, is_input=False, images_urls=images_urls)
             task_status_log = FullTaskStatus(
                 task_uid=task.uid,
@@ -64,7 +63,7 @@ class ImageGenerator:
     def __init__(self, pipeline: StableDiffusionPipeline):
         self._pipeline = pipeline
 
-    def generate_image(self, task: TextToImageTask) -> List[bytes]:
+    def generate_image(self, task: TextToImageTask) -> List[GeneratedImage]:
         result = self._pipeline(prompt=task.text,
                                 negative_prompt=task.negative_prompt,
                                 num_images_per_prompt=task.images_number,
@@ -75,5 +74,6 @@ class ImageGenerator:
         for image in images:
             image_bytes_io = BytesIO()
             image.save(image_bytes_io, format='PNG')
-            bytes_images.append(image_bytes_io.getvalue())
+            bytes_images.append(GeneratedImage(value=image_bytes_io.getvalue(),
+                                               extension='png'))
         return bytes_images

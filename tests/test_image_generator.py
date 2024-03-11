@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from diffusers import StableDiffusionPipeline
 
 from domain.image_generator import ImageGenerator
@@ -9,9 +11,11 @@ def test_generate_image():
     pipe: StableDiffusionPipeline = pipe.to("cpu")
 
     image_generator = ImageGenerator(pipe)
-    task = TextToImageTask(text='pretty white flower',
-                           num_inference_steps=5)
+    task = TextToImageTask(text='pretty red flower',
+                           num_inference_steps=10,
+                           images_number=2)
     images = image_generator.generate_image(task)
     assert images
-    with open('../images/test_image.png', 'wb') as file:
-        file.write(images[0])
+    for image in images:
+        with open(f'../images/test_{uuid4()}.{image.extension}', 'wb') as file:
+            file.write(image.value)
