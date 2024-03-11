@@ -6,6 +6,8 @@ from aio_pika import connect_robust
 from aio_pika.abc import AbstractChannel, AbstractConnection, AbstractIncomingMessage
 from loguru import logger
 
+from ports.common import ConverterI
+
 
 class RabbitMQConsumer(Startable):
 
@@ -34,21 +36,23 @@ class RabbitMQConsumer(Startable):
         else:
             logger.info(f'{self} already stopped')
 
-    def _processing_callback_bridge(self, processing_callback: Callable[[dict], Awaitable]):
+    def _processing_callback_bridge(self, processing_callback: Callable[[dict], Awaitable],
+                                    message_converter: ConverterI):
 
         async def inner(message: AbstractIncomingMessage):
             logger.debug(f'{self} got message')
             try:
                 async with message.process():
-                    message_str = message.body.decode('utf-8')
-                    message_dict = json.loads(message_str)
-                    await processing_callback(message_dict)
+                    decoded_message = message.body.decode('utf-8')
+                    converted_message = message_converter.convert(decoded_message)
+                    await processing_callback(converted_message)
             except BaseException as e:
                 logger.exception(e)
                 logger.error(f'{self} failed to process message: {e}')
 
         return inner
 
-    async def consume_queue(self, queue_name: str, processing_callback: Callable[[dict], Awaitable[bool]], **kwargs):
+    async def consume_queue(self, queue_name: str, processing_callback: Callable[[dict], Awaitable[bool]],
+                            message_converter: ConverterI, **kwargs):
         queue = await self._channel.declare_queue(queue_name, **kwargs)
-        await queue.consume(self._processing_callback_bridge(processing_callback))
+        await queue.consume(self._processing_callback_bridge(processing_callback, message_converter))

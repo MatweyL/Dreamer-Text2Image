@@ -1,23 +1,62 @@
-import pprint
-import time
+import asyncio
+from asyncio import CancelledError
 
-from PIL.Image import Image
 from diffusers import StableDiffusionPipeline
 
-pipe = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", )
-pipe: StableDiffusionPipeline = pipe.to("cpu")
+from adapters.common.converter import StrToPydantic
+from adapters.common.settings import rmq_settings
+from adapters.inbound.rabbit.consumer import RabbitMQConsumer
+from adapters.inbound.rabbit.settings import rmq_consumer_settings
+from adapters.outbound.minio.object_storage import MinioObjectStorage
+from adapters.outbound.minio.settings import minio_settings
+from adapters.outbound.rabbit.producer import RabbitMQProducer
+from adapters.outbound.rabbit.settings import task_status_settings, rmq_producer_settings
+from adapters.outbound.rabbit.task_status_sender import RMQTaskStatusSender
+from common.utils import build_connection_url
+from domain.image_generator import ImageGenerator, ImageGeneratorManager
+from domain.schemas.core.task import FullTask
+from domain.task_data_converter import TaskDataConverter
 
-prompt = "red cat sitting on table, realistic photo, simple picture, symbol"
-negative_prompt = "ugly, tiling, poorly drawn hands, poorly drawn feet, poorly drawn face, out of frame, extra limbs, disfigured, deformed, body out of frame, blurry, bad anatomy, blurred, watermark, grainy, signature, cut off, draft"
-s = time.perf_counter()
-result = pipe(prompt,
-              negative_prompt=negative_prompt,
-              num_images_per_prompt=3,
-              num_inference_steps=5)
-f = time.perf_counter()
-print(type(result))
-pprint.pprint(result.images)
-print('duration:', f - s)
-for i, image in enumerate(result.images):
-    image: Image
-    image.save(prompt.replace(' ', '_').replace(',', '') + f'_{i}.jpg')
+
+async def main():
+    task_data_converter = TaskDataConverter()
+    pipe = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", )
+    pipe: StableDiffusionPipeline = pipe.to("cpu")
+
+    rmq_connection_url = build_connection_url(rmq_settings.protocol, rmq_settings.user, rmq_settings.password,
+                                              rmq_settings.host, rmq_settings.port, rmq_settings.virtual_host)
+    rabbit_mq_consumer = RabbitMQConsumer(rmq_connection_url,
+                                          rmq_consumer_settings.prefetch_count,
+                                          rmq_consumer_settings.reconnect_timeout)
+    rabbit_mq_producer = RabbitMQProducer(rmq_connection_url,
+                                          rmq_producer_settings.reconnect_timeout,
+                                          rmq_producer_settings.produce_retries)
+    task_status_sender = RMQTaskStatusSender(rabbit_mq_producer,
+                                             task_status_settings.exchange_name,
+                                             task_status_settings.exchange_type,
+                                             task_status_settings.routing_key)
+    image_storage = MinioObjectStorage(minio_settings.host,
+                                       minio_settings.user,
+                                       minio_settings.password,
+                                       minio_settings.bucket,
+                                       minio_settings.retries,
+                                       minio_settings.retry_timeout, )
+    image_generator = ImageGenerator(pipe)
+    image_generator_manager = ImageGeneratorManager(image_generator, task_status_sender,
+                                                    image_storage, task_data_converter)
+    converter = StrToPydantic(FullTask)
+    await rabbit_mq_consumer.start()
+    await rabbit_mq_producer.start()
+    await rabbit_mq_consumer.consume_queue(rabbit_mq_consumer.queue_name,
+                                           image_generator_manager.generate_image,
+                                           converter)
+    try:
+        await asyncio.Future()
+    except CancelledError:
+        pass
+    await rabbit_mq_consumer.stop()
+    await rabbit_mq_producer.stop()
+
+
+if __name__ == '__main__':
+    asyncio.run(main())
