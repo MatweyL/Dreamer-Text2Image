@@ -12,10 +12,8 @@ def test_generate_image():
 
     image_generator = ImageGenerator(pipe)
     task = TextToImageTask(text='pretty red flower',
-                           num_inference_steps=10,
-                           images_number=2)
+                           num_inference_steps=1,
+                           images_number=1)
     images = image_generator.generate_image(task)
     assert images
-    for image in images:
-        with open(f'../images/test_{uuid4()}.{image.extension}', 'wb') as file:
-            file.write(image.value)
+

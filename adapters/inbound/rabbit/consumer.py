@@ -44,7 +44,7 @@ class RabbitMQConsumer(Startable):
                 async with message.process():
                     decoded_message = message.body.decode('utf-8')
                     converted_message = message_converter.convert(decoded_message)
-                    await processing_callback(converted_message)
+                await processing_callback(converted_message)
             except BaseException as e:
                 logger.exception(e)
                 logger.error(f'{self} failed to process message: {e}')
